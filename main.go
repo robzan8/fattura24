@@ -3,41 +3,37 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
-	"encoding/json"
 	"flag"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"strconv"
-	"strings"
+	"text/template"
 )
 
-var (
-	auth   string
-	client http.Client
-)
+var apiKey string
 
-const postUrl = "https://c2s.gnucoop.io/api/student"
+const postUrl = "https://www.app.fattura24.com/api/v0.3/SaveDocument"
 
 func main() {
-	flag.StringVar(&auth, "auth", "", "Authorization header")
+	flag.StringVar(&apiKey, "apiKey", "", "API key")
 	flag.Parse()
 	args := flag.Args()
 	log.SetFlags(0)
 
 	if len(args) == 0 {
 		log.Fatal(`No input files provided.
-Usage: c2simport -auth="Bearer blabla" table.csv`)
+Usage: fattura24 -apiKey=whatever table.csv`)
 	}
 
 	for _, fileName := range args {
-		c2sImportCsv(fileName)
+		fattPostCsv(fileName)
 	}
 }
 
-func c2sImportCsv(fileName string) {
+func fattPostCsv(fileName string) {
 	f, err := os.Open(fileName)
 	if err != nil {
 		log.Fatal(err)
@@ -53,46 +49,51 @@ func c2sImportCsv(fileName string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		c2sImportRecord(rec)
+		fattPostRecord(rec)
+	}
+}
+
+var tpl *template.Template
+
+func init() {
+	var err error
+	tpl, err = template.New("tpl").Parse(`<Fattura24>
+	<Document>
+		<DocumentType>{{.DocType}}</DocumentType>
+		<CustomerName>{{.Customer}}</CustomerName>
+		<CustomerAddress>{{.Address}}</CustomerAddress>
+		<CustomerPostcode>{{.PostCode}}</CustomerPostcode>
+		<CustomerCity>{{.City}}</CustomerCity>
+		<CustomerCountry>{{.Country}}</CustomerCountry>
+		<CustomerFiscalCode>{{.FiscalCode}}</CustomerFiscalCode>
+		<CustomerVatCode>{{.VatCode}}</CustomerVatCode>
+		<Total>{{.Total}}</Total>
+	</Document>
+</Fattura24>`)
+	if err != nil {
+		panic(err)
 	}
 }
 
 type Line struct {
-	Name    string `json:"identifier"`
-	Gender  string `json:"gender"`
-	ClassId int    `json:"student_class_id"`
+	DocType, Customer, Address, PostCode, City, Country, FiscalCode, VatCode, Total string
 }
 
-func c2sImportRecord(rec []string) {
-	line := Line{
-		Name:   rec[0],
-		Gender: strings.ToLower(rec[1]),
-	}
-	var err error
-	line.ClassId, err = strconv.Atoi(rec[2])
-	if err != nil {
-		log.Fatal("class id is not an integer")
-	}
-	body, err := json.Marshal(&line)
+func fattPostRecord(rec []string) {
+	line := Line{rec[0], rec[1], rec[2], rec[3], rec[4], rec[5], rec[6], rec[7], rec[8]}
+	var buf bytes.Buffer
+	err := tpl.Execute(&buf, line)
 	if err != nil {
 		log.Fatal(err)
 	}
+	xml := buf.String()
 
-	req, err := http.NewRequest("POST", postUrl, bytes.NewReader(body))
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Add("Content-Type", "application/json")
-	if auth != "" {
-		req.Header.Add("Authorization", auth)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := http.PostForm(postUrl, url.Values{"apiKey": {apiKey}, "xml": {xml}})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}

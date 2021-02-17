@@ -1,5 +1,20 @@
 installation:
-go get github.com/robzan8/c2simport
+go get github.com/robzan8/fattura24
 
 usage:
-c2simport -auth="Bearer blabla" table.csv
+fattura24 -apiKey=whatever table.csv
+
+Crea un documento con le api di fattura24
+https://www.fattura24.com/api-documentazione/
+
+Le colonne del file csv sono le seguenti (in ordine, senza header):
+
+DocType:	tipo di documento. "I" per fattura, "C" per ordine cliente;
+Customer:	nome e cognome o azienda;
+Address:	indirizzo
+PostCode:	CAP
+City:	città
+Country:	nazione
+FiscalCode:	codice fiscale
+VatCode:	partita iva
+Total:	importo totale
