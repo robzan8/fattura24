@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"text/template"
 )
 
@@ -58,17 +60,29 @@ var tpl *template.Template
 func init() {
 	var err error
 	tpl, err = template.New("tpl").Parse(`<Fattura24>
-	<Document>
-		<DocumentType>{{.DocType}}</DocumentType>
-		<CustomerName>{{.Customer}}</CustomerName>
-		<CustomerAddress>{{.Address}}</CustomerAddress>
-		<CustomerPostcode>{{.PostCode}}</CustomerPostcode>
-		<CustomerCity>{{.City}}</CustomerCity>
-		<CustomerCountry>{{.Country}}</CustomerCountry>
-		<CustomerFiscalCode>{{.FiscalCode}}</CustomerFiscalCode>
-		<CustomerVatCode>{{.VatCode}}</CustomerVatCode>
-		<Total>{{.Total}}</Total>
-	</Document>
+    <Document>
+        <DocumentType>{{.DocType}}</DocumentType>
+        <CustomerName>{{.Customer}}</CustomerName>
+        <CustomerAddress>{{.Address}}</CustomerAddress>
+        <CustomerPostcode>{{.PostCode}}</CustomerPostcode>
+        <CustomerCity>{{.City}}</CustomerCity>
+        <CustomerCountry>{{.Country}}</CustomerCountry>
+        <CustomerFiscalCode>{{.FiscalCode}}</CustomerFiscalCode>
+        <CustomerVatCode>{{.VatCode}}</CustomerVatCode>
+        <TotalWithoutTax>{{.WithoutTax}}</TotalWithoutTax>
+        <VatAmount>{{.Tax}}</VatAmount>
+        <Total>{{.Total}}</Total>
+        <SendEmail>false</SendEmail>
+        <Rows>
+            <Row>
+                <Description>-</Description>
+                <Qty>1</Qty>
+                <Price>{{.WithoutTax}}</Price>
+				<VatCode>22</VatCode>
+                <VatDescription>22%</VatDescription>
+            </Row>
+        </Rows>
+    </Document>
 </Fattura24>`)
 	if err != nil {
 		panic(err)
@@ -76,13 +90,24 @@ func init() {
 }
 
 type Line struct {
-	DocType, Customer, Address, PostCode, City, Country, FiscalCode, VatCode, Total string
+	DocType, Customer, Address, PostCode, City, Country, FiscalCode, VatCode string
+	WithoutTax, Tax, Total                                                   string
 }
 
+const iva = 0.22
+
 func fattPostRecord(rec []string) {
-	line := Line{rec[0], rec[1], rec[2], rec[3], rec[4], rec[5], rec[6], rec[7], rec[8]}
+	line := Line{rec[0], rec[1], rec[2], rec[3], rec[4], rec[5], rec[6], rec[7], rec[8], "", ""}
+	wt, err := strconv.ParseFloat(line.WithoutTax, 64)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tax := wt * iva
+	tot := wt + tax
+	line.Tax = strconv.FormatFloat(tax, 'f', 2, 64)
+	line.Total = strconv.FormatFloat(tot, 'f', 2, 64)
 	var buf bytes.Buffer
-	err := tpl.Execute(&buf, line)
+	err = tpl.Execute(&buf, line)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -97,7 +122,10 @@ func fattPostRecord(rec []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusCreated {
+	// The endpoint seems to return code 200 even in case of errors.
+	// In case of success, the response contains "Operation completed" or "Operazione completata"
+	s := string(body)
+	if !strings.Contains(s, "complet") || strings.Contains(s, "error") {
 		log.Fatalf("Unexpected response with code %d:\n%s", resp.StatusCode, body)
 	}
 }

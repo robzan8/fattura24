@@ -13,8 +13,10 @@ DocType:	tipo di documento. "I" per fattura, "C" per ordine cliente;
 Customer:	nome e cognome o azienda;
 Address:	indirizzo
 PostCode:	CAP
-City:	città
+City:		città
 Country:	nazione
 FiscalCode:	codice fiscale
 VatCode:	partita iva
-Total:	importo totale
+WithoutTax:	importo senza tasse
+
+L'importo totale viene calcolato automaticamente aggiungendo l'iva al 22%
